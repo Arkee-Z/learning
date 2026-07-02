@@ -53,15 +53,15 @@ int copy_stream(FILE *in, FILE *out, size_t bufsize) {
     int err = 0;
     while ((n = fread(buf, 1, bufsize, in)) > 0) {
 
-        stream_cnt = buf_count(buf, n);
         if (fwrite(buf, 1, n, out) != n) {
 
             err = -2;
             break;
         }
-        printf("\n");
-        printf("\nLines: %zu, Words: %zu, Bytes: %zu\n", stream_cnt.lines, stream_cnt.words, stream_cnt.bytes);
-        printf("\n");
+    }
+    if (ferror(in)) {
+        
+        return -3;
     }
     free(buf);
     return err; 
