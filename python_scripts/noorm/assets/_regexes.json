@@ -1,0 +1,19 @@
+{
+  "sn": "F[A-Z0-9]{5}000[A-Z0-9]{2}0001JYP",
+  "noorm_patterns": [
+    "^#(?P<id>\\d+)_(?P<checkpoint>[^_]+)_BFail_(?P<sn>F[A-Z0-9]{5}000[A-Z0-9]{2}0001JYP)_(?P<date>\\d{8})_(?P<time>\\d{6})$",
+    "^#(?P<id>\\d+)_(?P<checkpoint>[^_]+)_(?P<sn>F[A-Z0-9]{5}000[A-Z0-9]{2}0001JYP)_(?P<date>\\d{8})_(?P<time>\\d{6})$"
+  ],
+  "folder_patterns": [
+    "^(?P<sn1>F[A-Z0-9]{5}000[A-Z0-9]{2}0001JYP)_(?P<sn2>F[A-Z0-9]{5}000[A-Z0-9]{2}0001JYP)#(?P<id>\\d+)_(?P<date>\\d{8})_(?P<time>\\d{6})",
+    "^[^_]+_[^_]+_(?P<sn>F[A-Z0-9]{5}000[A-Z0-9]{2}0001JYP)_(?P<rest>.*)$",
+    "^[^_]+_[^_]+_(?P<sn>F[A-Z0-9]{5}000[A-Z0-9]{2}0001JYP)#(?P<rest>.*)$",
+    "^[^_]+_(?P<sn>F[A-Z0-9]{5}000[A-Z0-9]{2}0001JYP)#(?P<rest>.*)$",
+    "^[^_]+_(?P<sn>F[A-Z0-9]{5}000[A-Z0-9]{2}0001JYP)_$",
+    "^[^_]+_(?P<sn>F[A-Z0-9]{5}000[A-Z0-9]{2}0001JYP)$"
+  ],
+  "pass_fail_prefix": "^(PASS|FAIL)_(?P<timestamp>\\d{8}_\\d{6})_.*",
+  "fail_prefix": "^Fail",
+  "healthcheck_csv": "^FATP-HealthCheck__.*\\.csv$",
+  "timestamp_in_csv": "\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}"
+}
