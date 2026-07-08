@@ -114,6 +114,7 @@ class FolderNoorm:
         if not os.path.isdir(base):
             raise NotADirectoryError(f"路径不存在: {base}")
 
+
         base_name = os.path.basename(base)
         if base_name == "TestLogging":
             return base
@@ -154,7 +155,7 @@ class FolderNoorm:
                 return {
                     "sn": m.group("sn"),
                     "id": m.group("id"),
-                    "checkpoint": m.group("checkpoint"),
+                    "checkpoint": m.group("checkpoint").replace("/", ":"),
                     "date": m.group("date"),
                     "time": m.group("time"),
                 }
@@ -250,17 +251,60 @@ class FolderNoorm:
 
     # ---- Fail 日志检测 ----
 
-    def has_fail_logs(self, folder_path):
+    def get_fail_level(self, folder_path):
         """
-        检查目标文件夹（递归）中是否有以 Fail 开头的 log 文件。
+        检查目标文件夹是否有 Fail 日志，并确定是第几次重试。
+        在一个 CP 点内，一个 SN 的 AAB 三次测试：
+          - 第 1、2 次 Fail → AFail（不更新 CP）
+          - 第 3 次 Fail     → BFail（更新 CP）
+        判定方式：扫描 TestLogging 下已 noorm 的文件夹中，
+        同名 SN + 同 CP_name + AFail 的数量。
+        返回 None（无Fail）/ "AFail" / "BFail"。
         """
+        # 检查文件夹内是否有 Fail 日志
         fail_re = re.compile(self.regexes.get("fail_prefix", "^Fail"),
                              re.IGNORECASE)
+        has_fail = False
         for root, dirs, files in os.walk(folder_path):
             for fname in files:
                 if fail_re.match(fname):
-                    return True
-        return False
+                    has_fail = True
+                    break
+            if has_fail:
+                break
+
+        if not has_fail:
+            return None
+
+        return "AFail"
+
+    def _count_afail_attempts(self, sn, cp_name):
+        """
+        统计 TestLogging 目录下已 noorm 的文件夹中，
+        指定 SN + CP 的 AFail 出现次数。
+        """
+        count = 0
+        cp_clean = cp_name.strip().replace(" ", "-")
+        cp_clean = cp_clean.replace("/", ":")
+        cp_clean = re.sub(r"[\\*?\"<>|]", "_", cp_clean)
+
+        try:
+            test_logging_dir = self._get_test_logging_dir()
+        except (FileNotFoundError, NotADirectoryError):
+            return 0
+
+        for entry in os.listdir(test_logging_dir):
+            entry_path = os.path.join(test_logging_dir, entry)
+            if not os.path.isdir(entry_path):
+                continue
+            # 匹配 AFail 模式: #{id}_{cp_clean}_AFail_{sn}_{timestamp}
+            afail_pattern = re.compile(
+                rf"#\d+_{re.escape(cp_clean)}_AFail_{re.escape(sn)}_\d{{8}}_\d{{6}}$"
+            )
+            if afail_pattern.match(entry):
+                count += 1
+
+        return count
 
     # ---- CP 状态写入 ----
 
@@ -323,11 +367,14 @@ class FolderNoorm:
     # ---- 标准名称生成 ----
 
     def build_standard_name(self, sn, unit_no, cp_index, cp_name, parsed_info,
-                            has_fail):
+                            fail_level):
         """
         按模式生成标准文件夹名。
-        格式: #{id}_{checkpoint}_{sn}_{timestamp}
-        或   #{id}_{checkpoint}_BFail_{sn}_{timestamp}
+        格式:
+          Pass        → #{id}_{checkpoint}_{sn}_{timestamp}
+          AFail       → #{id}_{checkpoint}_AFail_{sn}_{timestamp}
+          BFail       → #{id}_{checkpoint}_BFail_{sn}_{timestamp}
+        fail_level: None / "AFail" / "BFail"
         """
         item_id = parsed_info.get("id", "")
         date_str = parsed_info.get("date", "")
@@ -336,14 +383,20 @@ class FolderNoorm:
         # 拼接 timestamp
         timestamp = f"{date_str}_{time_str}" if date_str and time_str else ""
 
-        # 简化 checkpoint 名：只取第一个单词/关键部分
-        # 这里使用完整名称，但替换空格为下划线
-        cp_clean = cp_name.strip().replace(" ", "_")
+        # 清理 checkpoint 名：/ → : (macOS Finder)，其他不安全字符 → _
+        cp_clean = cp_name.strip().replace(" ", "-")
+        cp_clean = cp_clean.replace("/", ":")
+        cp_clean = re.sub(r"[\\*?\"<>|]", "_", cp_clean)
 
-        if has_fail:
+        if fail_level == "AFail":
+            new_name = f"#{item_id}_{cp_clean}_AFail_{sn}_{timestamp}"
+        elif fail_level == "BFail":
             new_name = f"#{item_id}_{cp_clean}_BFail_{sn}_{timestamp}"
         else:
             new_name = f"#{item_id}_{cp_clean}_{sn}_{timestamp}"
+
+        # 清理 checkpoint 名：/ → : (macOS Finder)
+        new_name = new_name.replace("/", ":")
 
         # 清理多余的下划线
         new_name = re.sub(r"_+", "_", new_name)
@@ -454,27 +507,39 @@ class FolderNoorm:
         result["cp_index"] = cp_index
         result["cp_name"] = cp_name
 
-        # 5. 检测 Fail 日志
-        has_fail = self.has_fail_logs(folder_path)
-        result["has_fail"] = has_fail
+        # 5. 检测 Fail 日志并确定 fail level
+        fail_level = self.get_fail_level(folder_path)
+        result["fail_level"] = fail_level
+        result["has_fail"] = fail_level is not None
 
-        # 6. 生成标准名称
+        # 6. 统计该 SN+CP 的 AFail 尝试次数，决定是 AFail 还是 BFail
+        if fail_level == "AFail":
+            afail_count = self._count_afail_attempts(sn, cp_name)
+            if afail_count >= 2:
+                fail_level = "BFail"
+                result["fail_level"] = "BFail"
+            logger.debug("SN [%s] CP[%s] AFail 已有 %d 次, 本次为 %s",
+                         sn, cp_name, afail_count, fail_level)
+
+        # 7. 生成标准名称
         new_name = self.build_standard_name(
-            sn, unit_no, cp_index, cp_name, parsed, has_fail
+            sn, unit_no, cp_index, cp_name, parsed, fail_level
         )
         result["new_name"] = new_name
 
-        # 7. 重命名
+        # 8. 重命名
         _, new_path, executed = self.rename_folder(
             folder_path, new_name, dry_run=dry_run
         )
         result["success"] = executed or dry_run
         result["new_path"] = new_path
 
-        # 8. 更新 CP 状态（重命名成功后才会真正更新文件）
-        #    在 dry-run 下仅打印日志
-        if executed or dry_run:
+        # 9. 更新 CP 状态（仅 BFail 或 Pass 才更新）
+        #    AFail 不更新 CP
+        if (executed or dry_run) and fail_level != "AFail":
             self.update_cp_status(sn, cp_index, dry_run=dry_run)
+        elif fail_level == "AFail":
+            logger.info("AFail 不更新 CP 状态 (SN: %s, CP%d)", sn, cp_index)
 
         if dry_run:
             result["message"] = f"[DRY-RUN] 准备重命名: {folder_name} -> {new_name}"

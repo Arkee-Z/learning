@@ -50,6 +50,30 @@ def setup_logging(verbose=False):
         logging.getLogger(logger_name).setLevel(logging.WARNING)
 
 
+def _normalize_finder_path(path):
+    """
+    macOS Finder 兼容：将路径中非分隔符的 / 替换为 :。
+    Finder 中 / 显示为 :，用户在命令行或 txt 中用 / 替代 :。
+    策略：从后往前尝试合并相邻路径组件（将 / 还原为 :），
+    直到路径存在。
+    """
+    if not path:
+        return path
+    if os.path.exists(path):
+        return path
+
+    parts = path.split(os.sep)
+    # 从前往后尝试合并相邻组件（将 / 还原为 Finder 的 :）
+    for i in range(len(parts) - 1):
+        test_parts = parts.copy()
+        test_parts[i] = test_parts[i] + ":" + test_parts[i + 1]
+        del test_parts[i + 1]
+        test_path = os.sep.join(test_parts)
+        if os.path.exists(test_path):
+            return test_path
+    return path
+
+
 def print_header(title):
     """打印格式化标题"""
     logger.info("")
@@ -123,6 +147,101 @@ def do_check(args):
     print_footer()
 
 
+def _get_sn_file_handlers(sns, log_dir, level):
+    """为每个 SN 创建或获取日志文件 FileHandler。
+    返回 handler 列表。
+    """
+    os.makedirs(log_dir, exist_ok=True)
+    formatter = logging.Formatter(
+        "[%(asctime)s] %(levelname)-8s %(message)s",
+        datefmt="%H:%M:%S",
+    )
+    handlers = []
+    for sn in sns:
+        log_path = os.path.join(log_dir, f"{sn}.log")
+        h = logging.FileHandler(log_path, mode="a", encoding="utf-8")
+        h.setFormatter(formatter)
+        h.setLevel(level)
+        handlers.append(h)
+    return handlers
+
+
+def do_batch(args):
+    """执行批处理模式：读取 txt 中的路径列表，逐行拼接 base 后依次处理"""
+    base_path = args.base
+    batch_file = args.batch
+    log_dir = args.log_dir
+
+    if not os.path.isfile(batch_file):
+        logger.error("批处理文件不存在: %s", batch_file)
+        sys.exit(1)
+
+    with open(batch_file, "r", encoding="utf-8") as f:
+        lines = [line.strip() for line in f if line.strip()]
+
+    total = len(lines)
+    level = logging.DEBUG if args.verbose else logging.INFO
+    mode_str = "DRY-RUN" if args.dry_run else "执行"
+    print_header(f"noorm 批处理 [{mode_str}]")
+    logger.info("基路径: %s", base_path)
+    logger.info("批处理文件: %s (%d 个路径)", batch_file, total)
+    logger.info("日志目录: %s", log_dir)
+    logger.info("Dry-run: %s", args.dry_run)
+    logger.info("跳过文件夹重命名: %s", args.skip_rename)
+    logger.info("跳过 CSV 标准化: %s", args.skip_csv)
+
+    all_folder_results = []
+    all_csv_results = []
+
+    for i, line in enumerate(lines, 1):
+        full_path = os.path.join(base_path, line)
+        full_path = _normalize_finder_path(full_path)
+        logger.info("")
+        logger.info("[%d/%d] 处理: %s", i, total, full_path)
+
+        if not os.path.isdir(full_path):
+            logger.warning("  路径不存在，跳过: %s", full_path)
+            continue
+
+        # 预先扫描文件夹，获取 SN 列表
+        folder_info = check_folders(full_path)
+        sns = sorted({f["sn"] for f in folder_info if f.get("sn")})
+
+        # 为每个 SN 添加文件日志处理器
+        noorm_logger = logging.getLogger("noorm")
+        sn_handlers = []
+        if sns:
+            sn_handlers = _get_sn_file_handlers(sns, log_dir, level)
+            for h in sn_handlers:
+                noorm_logger.addHandler(h)
+
+        folder_results, csv_result = clean_run(
+            full_path,
+            dry_run=args.dry_run,
+            skip_rename=args.skip_rename,
+            skip_csv=args.skip_csv,
+        )
+
+        # 移除并关闭 SN 文件日志处理器
+        for h in sn_handlers:
+            noorm_logger.removeHandler(h)
+            h.close()
+
+        all_folder_results.append((full_path, folder_results))
+        all_csv_results.append((full_path, csv_result))
+
+    # 汇总
+    logger.info("")
+    print_header("批处理汇总")
+    total_dirs = sum(len(r[1]) for r in all_folder_results)
+    total_renamed = sum(1 for r in all_folder_results for fr in r[1] if fr.get("new_name"))
+    logger.info("总计处理 %d 个路径, %d 个文件夹, %d 个重命名",
+                len(lines), total_dirs, total_renamed)
+
+    print_footer()
+    return all_folder_results, all_csv_results
+
+
 def do_run(args):
     """执行运行模式"""
     mode_str = "DRY-RUN" if args.dry_run else "执行"
@@ -193,8 +312,20 @@ def main():
 
     parser.add_argument(
         "--path",
-        required=True,
-        help="TestLogging 文件夹的父目录（或 TestLogging 自身）",
+        help="TestLogging 文件夹的父目录（或 TestLogging 自身），与 --batch 二选一",
+    )
+    parser.add_argument(
+        "--base",
+        help="批处理基路径，配合 --batch 使用（如 ./example/UV）",
+    )
+    parser.add_argument(
+        "--batch",
+        help="批处理模式，读取 txt 文件中的路径列表，依次处理",
+    )
+    parser.add_argument(
+        "--log-dir",
+        default="./logs",
+        help="批处理日志输出目录（默认 ./logs），每个 SN 独立一个 .log 文件",
     )
     parser.add_argument(
         "--dry-run",
@@ -230,18 +361,46 @@ def main():
     args = parser.parse_args()
     setup_logging(verbose=args.verbose)
 
-    # 验证路径
-    if not os.path.isdir(args.path):
-        logger.error("路径不存在或不是目录: %s", args.path)
-        sys.exit(1)
+    # macOS Finder 兼容：替换路径组件内部的 /
+    if args.path:
+        args.path = _normalize_finder_path(args.path)
+    if args.base:
+        args.base = _normalize_finder_path(args.base)
+
+    # 验证参数：--path 与 --batch 二选一
+    if args.batch:
+        if args.path:
+            logger.error("--path 和 --batch 不能同时使用")
+            sys.exit(1)
+        if not args.base:
+            logger.error("使用 --batch 时必须指定 --base")
+            sys.exit(1)
+        if not os.path.isfile(args.batch):
+            logger.error("批处理文件不存在: %s", args.batch)
+            sys.exit(1)
+        if not os.path.isdir(args.base):
+            logger.error("基路径不存在: %s", args.base)
+            sys.exit(1)
+    else:
+        if not args.path:
+            logger.error("缺少参数: 使用 --path 或 --batch")
+            sys.exit(1)
+        if not os.path.isdir(args.path):
+            logger.error("路径不存在或不是目录: %s", args.path)
+            sys.exit(1)
 
     try:
         if args.rollback:
+            if not args.path:
+                logger.error("回滚模式需要 --path")
+                sys.exit(1)
             print_header("noorm 回滚")
             rollback(args.path)
             print_footer()
         elif args.check:
             do_check(args)
+        elif args.batch:
+            do_batch(args)
         else:
             do_run(args)
     except KeyboardInterrupt:

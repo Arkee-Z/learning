@@ -89,11 +89,20 @@ def check_folders(root_path):
         info["cp_info"] = f"CP{cp_index}: {cp_name}"
 
         # 检测 Fail 日志
-        info["has_fail"] = fn.has_fail_logs(folder_path)
+        fail_level = fn.get_fail_level(folder_path)
+        info["has_fail"] = fail_level is not None
+        info["fail_level"] = fail_level
+
+        # 统计 AFail 次数决定 AFail/BFail
+        if fail_level == "AFail":
+            afail_count = fn._count_afail_attempts(sn, cp_name)
+            if afail_count >= 2:
+                fail_level = "BFail"
+                info["fail_level"] = "BFail"
 
         # 生成标准名
         new_name = fn.build_standard_name(
-            sn, info["unit_no"], cp_index, cp_name, parsed, info["has_fail"]
+            sn, info["unit_no"], cp_index, cp_name, parsed, fail_level
         )
         info["planned_name"] = new_name
         info["status"] = "ready"

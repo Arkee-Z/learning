@@ -1,21 +1,33 @@
 [Versions-Comments]
 
-[2026-07-06 noorm v0.1] 
-[start 11:18] - 本项目旨在解决 REL 测试数据&报告整理中存在的高频次&低效率的重复性手动名称标准化的问题. 考虑到 Lab 环境的封闭化, 本项目使用无第三方库的 python3.9.6 标准环境. 经过前期混乱的 log folder rename script 的尝试, 我决定不再使用硬编码的路径变量和纯函数实现，改用 OOP 重构该项目，并将项目重命名为 noorm, 并将当前版本号记为 v0.1.
-[/arch 14:28] - 本项目当前架构如下: core 包含 csv_noorm 和 folder_noorm, proc 包含 data_check、data_clean、data_parser, ui 包括 cli 和 gui, constants 包括 error 常量, assets 包括 _waterfall、_wfcheck 和 _regexes 正则字典, 使用 main 调用所有模块.
+[2026-07-06 noorm v0.0.0] 
+[start 11:18] ----- 本项目旨在解决 REL 测试数据&报告整理中存在的高频次&低效率的重复性手动名称标准化的问题. 考虑到 Lab 环境的封闭化, 本项目使用无第三方库的 python3.9.6 标准环境. 经过前期混乱的 log folder rename script 的尝试, 我决定不再使用硬编码的路径变量和纯函数实现，改用 OOP 重构该项目，并将项目重命名为 noorm, 并将当前版本号记为 v0.0.x.
+[/done 14:28] plan: 本项目当前架构如下: core 包含 csv_noorm 和 folder_noorm, proc 包含 data_check、data_clean、data_parser, ui 包括 cli 和 gui, constants 包括 error 常量, assets 包括 _waterfall、_wfcheck 和 _regexes 正则字典, 使用 main 调用所有模块.
 
-[2026-07-07 noorm v0.1] 
-[/plan 15:16] - 计划通过 _regexes 正则匹配 sn ([A-Z0-9]{18}), 通过 sn 在 _wfcheck 中检查 cp 点, 如果为 N 则在 _waterfall 中查询该 cp 点的 checkpoint 细项和 sn 对应的 Unit No. 如果为 Y, 则继续检查下一个 cp 点. 如果为空, 则退出检查, 并返回信息, 打印该 sn 的testplan 已完成的提示信息.
-[/plan 17:02] - 计划通过 _regexes 匹配 sn 获取原始字段 timestamp 等信息, 并与 _waterfall 中的 checkpoint、 Unit No 和 sn 等按照 "#{id}_{checkpoint}_{sn}_{timestamp}" 的模式进行拼接得到标准名称, 从而执行重命名. 在求出标准名称之前, 检查该文件夹中是否含有 Fail 开头的 log 文件, 如果有, 则按照 "#{id}_{checkpoint}_BFail_{sn}_{timestamp}" 的形式得到标准名称, 并以此进行重命名.
-[/plan 22:42] - 对目标对象进行名称一致化之后, 需要检查 TestLogging 中的 FATP-HealthCheck__X3819_YYYY-MM-DD_2.2.30.0_SpecNA-1.csv 文件是否已标准化, 如果没有则对其进行标准化, 将部分 head 改为指定内容, 'MpToolLib'=>'Touch Station'(0,0), 第一行除了 (0,0) 以外全部改为空, 'serialnumber'=>'SerialNumber'(1,0), 'overallResult'=>'Test Pass/Fail Status'(1,1), 'startTime'=>'StartTime'(1,5). 同时, 检查是否存在 sn 为空的行 (即第一列中为空的行), 如果有, 则删除整行. 最后, 需要打印日志, 并检查 FATP-HealthCheck 表中的 sn 和 编号是否与文件夹名称相匹配, 如果存在不匹配, 则打印 warning 信息, 不停止程序, 如果完全匹配, 则打印 success 信息.
-[/plan 23:02] - 由于所有的目标对象都被包裹在 TestLogging 文件夹中, 所以在寻找路径或者打印路径时, 忽略该包裹层, 不再需要显式输入或者添加 TestLogging, 而是直接默认查找路径下的TestLogging文件夹.
-[/plan 23:07] - 由于 gui 调试复杂, 考虑先不进行 gui 实现, 仅完成 cli 交互. 
-[/plan 23:09] - 考虑先使用 AI 编写一个原型.
-[/done 23:27] - 用 AI 实现了 cli 原型, 验证功能时发现忘记了: 在每次完成 noorm 名称一致化后, 需要将 sn 在 _wfcheck 中相应的 cp 点状态从 N 改为 Y, 以便下次自动化检查 cp 点时进入下一 cp.
-[/done 23:39] - 1.由于所有的目标对象都被包裹在 TestLogging 文件夹中, 所以在寻找路径或者打印路径时, 忽略该包裹层, 不再需要显式输入或者添加 TestLogging, 而是直接默认查找路径下的 TestLogging 文件夹. 2.需要将 "#{id}_{checkpoint}_{sn}_{timestamp}" 和 "#{id}_{checkpoint}_BFail_{sn}_{timestamp}" 加入匹配模式中, 如果匹配到这两种其中一个, 则提示该路径已进行 noorm. 3.将 "^[^_]+_(?P<sn>F[A-Z0-9]{5}000[A-Z0-9]{2}0001JYP)#(?P<rest>.*)$" 加入匹配模式中.
+[2026-07-07 noorm v0.0.0] 
+[/done 15:16] plan: 计划通过 _regexes 正则匹配 sn ([A-Z0-9]{18}), 通过 sn 在 _wfcheck 中检查 cp 点, 如果为 N 则在 _waterfall 中查询该 cp 点的 checkpoint 细项和 sn 对应的 Unit No. 如果为 Y, 则继续检查下一个 cp 点. 如果为空, 则退出检查, 并返回信息, 打印该 sn 的testplan 已完成的提示信息.
+[/done 17:02] plan: 计划通过 _regexes 匹配 sn 获取原始字段 timestamp 等信息, 并与 _waterfall 中的 checkpoint、 Unit No 和 sn 等按照 "#{id}_{checkpoint}_{sn}_{timestamp}" 的模式进行拼接得到标准名称, 从而执行重命名. 在求出标准名称之前, 检查该文件夹中是否含有 Fail 开头的 log 文件, 如果有, 则按照 "#{id}_{checkpoint}_BFail_{sn}_{timestamp}" 的形式得到标准名称, 并以此进行重命名.
+[/done 22:42] plan: 对目标对象进行名称一致化之后, 需要检查 TestLogging 中的 FATP-HealthCheck__X3819_YYYY-MM-DD_2.2.30.0_SpecNA-1.csv 文件是否已标准化, 如果没有则对其进行标准化, 将部分 head 改为指定内容, 'MpToolLib'=>'Touch Station'(0,0), 第一行除了 (0,0) 以外全部改为空, 'serialnumber'=>'SerialNumber'(1,0), 'overallResult'=>'Test Pass/Fail Status'(1,1), 'startTime'=>'StartTime'(1,5). 同时, 检查是否存在 sn 为空的行 (即第一列中为空的行), 如果有, 则删除整行. 最后, 需要打印日志, 并检查 FATP-HealthCheck 表中的 sn 和 编号是否与文件夹名称相匹配, 如果存在不匹配, 则打印 warning 信息, 不停止程序, 如果完全匹配, 则打印 success 信息.
+[/done 23:02] plan: 由于所有的目标对象都被包裹在 TestLogging 文件夹中, 所以在寻找路径或者打印路径时, 忽略该包裹层, 不再需要显式输入或者添加 TestLogging, 而是直接默认查找路径下的TestLogging文件夹.
+[/done 23:07] plan: 由于 gui 调试复杂, 考虑先不进行 gui 实现, 仅完成 cli 交互. 
+[/done 23:09] plan: 考虑先使用 AI 编写一个原型.
 
-[2026-07-08 noorm v0.1] 
-[/done 00:39] - fixed: 1.proc/data_check.py — sn_count 排除 Upper/Lower 规范限值行. 2.ui/cli.py — do_check() 补充打印 has_header 和 has_data_rows.
-[/ondo 00:58] - 发现脚本将 FATP-HealthCheck 表中的 Lower 和 Upper 行也删除了, 需要进行修复, 使得 sn 匹配跳过此两行、表头行和 'MpToolLib'/'Touch Station' 行.
-[/ondo 01:06] - 发现脚本未进行"检查 FATP-HealthCheck 表中的 sn 和 编号是否与文件夹名称相匹配, 如果存在不匹配, 则打印 warning 信息"的输出, 需要补充.
+[2026-07-07 noorm v0.0.1] 
+[/done 23:27] fixed: 用 AI 实现了 cli 原型, 验证功能时忘记了: 在每次完成 noorm 名称一致化后, 需要将 sn 在 _wfcheck 中相应的 cp 点状态从 N 改为 Y, 以便下次自动化检查 cp 点时进入下一 cp.
+[/done 23:39] fixed: 1.由于所有的目标对象都被包裹在 TestLogging 文件夹中, 所以在寻找路径或者打印路径时, 忽略该包裹层, 不再需要显式输入或者添加 TestLogging, 而是直接默认查找路径下的 TestLogging 文件夹; 2.需要将 "#{id}_{checkpoint}_{sn}_{timestamp}" 和 "#{id}_{checkpoint}_BFail_{sn}_{timestamp}" 加入匹配模式中, 如果匹配到这两种其中一个, 则提示该路径已进行 noorm; 3.将 "^[^_]+_(?P<sn>F[A-Z0-9]{5}000[A-Z0-9]{2}0001JYP)#(?P<rest>.*)$" 加入匹配模式中.
+
+[2026-07-08 noorm v0.0.1] 
+[/done 00:39] fixed: 1.proc/data_check.py — sn_count 排除 Upper/Lower 规范限值行; 2.ui/cli.py — do_check() 补充打印 has_header 和 has_data_rows.
+[/done 00:58] fixed: 脚本将 FATP-HealthCheck 表中的 Lower 和 Upper 行也删除了, 需要进行修复, 使得 sn 匹配跳过此两行、表头行和 'MpToolLib'/'Touch Station' 行.
+[/done 01:06] fixed: 脚本未进行"检查 FATP-HealthCheck 表中的 sn 和 编号是否与文件夹名称相匹配, 如果存在不匹配, 则打印 warning 信息"的输出, 需要补充.
+[/done 14:56] debug: 脚本未对字符串特殊符号, 如 '/' 进行处理, 导致路径解析异常报错 [Errno 2]. 
+[/done 14:54] debug: 脚本在碰到 Fail 时进行了错误的处理. BFail 是已存在两次 Fail 记录之后的第三次 Fail (在一个 cp点 中, 如果出现 Fail, 会对一个 sn 依次进行 AAB 三次测试, 若任意一次 Pass, 则该 cp 点结束, 不进行后续测试, 若三次均为 Fail, 则最后一次重命名为 BFail, 该 cp 点结束).
+[/done 18:56] plan: 需要一种批处理模式, 读取txt文本文档中的路径, 以 "./example" 中的文件夹为基路径(如 ./example/UV), 从上到下依次得到如同 "./example/UV/xxx" 形式的TestLogging父路径. 从而进行批量按次序的 noorm 处理.
+
+[2026-07-08 noorm v0.0.2] 
+[/done 22:11] fixed: 1.修复 build_standard_name 中特殊字符 '/'' 替换为 ':' (macOS Finder兼容); 2.重写 AFail/BFail 逻辑, 增加 get_fail_level 和 _count_afail_attempts, 前两次 AFail 不更新 CP; 3.实现 --base + --batch 批处理模式.
+
+[2026-07-08 noorm v0.0.3] 
+[/done 22:27] add: 批处理模式新增 --log-dir 参数，按 SN 将日志分别输出到 logs/{SN}.log 文件.
+[/done 22:30] fixed: 需要将' '替换为'-', 而不是'_'
 
